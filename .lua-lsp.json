@@ -1,0 +1,8 @@
+{
+  "lib": {
+    "extra": [
+      "~/git/kong/types",
+      "/opt/lua-language-server/meta/3rd/OpenResty/library/"
+    ]
+  }
+}
