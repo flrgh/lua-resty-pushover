@@ -6,13 +6,15 @@ local _M = {
 local http = require "resty.http"
 local cjson = require "cjson.safe"
 
-local insert = table.insert
-local concat = table.concat
-local type = type
+local insert   = table.insert
+local concat   = table.concat
+local type     = type
 local tostring = tostring
-local pairs = pairs
-local ipairs = ipairs
-local fmt = string.format
+local pairs    = pairs
+local ipairs   = ipairs
+local fmt      = string.format
+local decode   = cjson.decode
+local encode   = cjson.encode
 
 local BASE_URL = "https://api.pushover.net/1"
 
@@ -21,16 +23,11 @@ local MESSAGE_HEADERS = {
   ["user-agent"]   = "lua-resty-pushover v" .. _M._VERSION .. " (https://github.com/flrgh/lua-resty-pushover)",
 }
 
---- The pushover client object
----
----@class resty.pushover.client
----
----@field token    string
----@field user_key string
----@field base_uri string
----@field httpc    resty.http.httpc
-local client = {}
-client.__index = client
+local const_mt = {
+  __newindex = function()
+    error("Attempted to modify table")
+  end,
+}
 
 ---@alias resty.pushover.api.message.sound
 ---| '"pushover"' # default
@@ -57,11 +54,6 @@ client.__index = client
 ---| '"vibrate"'
 ---| '"none"'
 
-local const_mt = {
-  __newindex = function()
-    error("Attempted to modify table")
-  end,
-}
 
 local MESSAGE_SOUNDS = setmetatable({
   --- default
@@ -159,42 +151,81 @@ local function format_message_device(dev)
 end
 
 local validate_types
+local message_fields = {
+  { "message",   "string",  true  },
+  { "url",       "string",  false },
+  { "title",     "string",  false },
+  { "url_title", "string",  false },
+  { "callback",  "string",  false },
+  { "sound",     "string",  false },
+  { "retry",     "number",  false },
+  { "timestamp", "number",  false },
+  { "html",      "boolean", false },
+  { "monospace", "boolean", false },
+}
+local client_fields = {
+  { "token",    "string", true  },
+  { "user_key", "string", true  },
+  { "base_url", "string", false },
+}
+
 do
-  local fields = {
-    { "message",   "string"  },
-    { "url",       "string"  },
-    { "title",     "string"  },
-    { "url_title", "string"  },
-    { "callback",  "string"  },
-    { "sound",     "string"  },
-    { "retry",     "number"  },
-    { "timestamp", "number"  },
-    { "html",      "boolean" },
-    { "monospace", "boolean" },
-  }
+  local tpl = function(s)
+    return function(...)
+      return s:format(...)
+    end
+  end
+  local e_type = tpl "invalid `%s.%s` type (expected: %s, got: %s)"
+  local e_empty = tpl "`%s.%s` cannot be empty"
+  local e_equired = tpl "`%s.%s` is required"
 
-  local e_type = "invalid `message.%s` type (expected: %s, got: %s)"
-  local e_empty = "`message.%s` cannot be empty"
+  local errors
+  local function add_error(s)
+    errors = errors or { n = 0 }
+    local n = errors.n + 1
+    errors[n] = s
+    errors.n = n
+  end
 
-  ---@param m resty.pushover.api.message
-  ---@return boolean ok
-  ---@return string? error
-  validate_types = function(m)
+  ---@param ns string
+  ---@param fields table[]
+  ---@param t table
+  ---@return boolean valid
+  ---@return string? err
+  validate_types = function(ns, fields, t)
+    if t == nil or type(t) ~= "table" then
+      return nil, "`" .. ns .. "` table is required"
+    end
+
+    errors = nil
+
     for _, field in ipairs(fields) do
-      local name, ftype = field[1], field[2]
+      local name, ftype, required = field[1], field[2], field[3]
 
-      local value = m[name]
-      if value ~= nil then
+      local value = t[name]
+      local ok = true
+
+      if required and value == nil then
+        ok = false
+        add_error(e_equired(ns, name))
+      end
+
+      if ok and value ~= nil then
         local vtype = type(value)
 
         if vtype ~= ftype then
-          return nil, e_type:format(name, ftype, vtype)
+          ok = false
+          add_error(e_type(ns, name, ftype, vtype))
         end
 
-        if vtype == "string" and value == "" then
-          return nil, e_empty:format(name)
+        if ok and vtype == "string" and value == "" then
+          add_error(e_empty(ns, name))
         end
       end
+    end
+
+    if errors then
+      return nil, concat(errors, "\n"), errors
     end
 
     return true
@@ -204,7 +235,7 @@ end
 
 ---@param msg string|resty.pushover.api.message
 ---@return resty.pushover.api.message? message
----@return string? error
+---@return string? err
 local function validate_message(msg)
   if not msg then
     return nil, "message required"
@@ -219,33 +250,29 @@ local function validate_message(msg)
     return nil, "invalid message type: " .. mtype
   end
 
-  if not msg.message then
-    return nil, "empty message"
-  end
-
-  local ok, err = validate_types(msg)
+  local ok, err = validate_types("message", message_fields, msg)
   if not ok then
     return nil, err
   end
 
   if msg.html and msg.monospace then
-    return nil, "`html` and `monospace` are mutually exclusive"
+    return nil, "`message.html` and `message.monospace` are mutually exclusive"
   end
 
 
   if msg.url_title and not msg.url then
-    return nil, "`url` is required for `url_title`"
+    return nil, "`message.url` is required for `message.url_title`"
   end
 
   if msg.device then
     local dtype = type(msg.device)
     if dtype ~= "string" and dtype ~= "table" then
-      return nil, "invalid `device` type: " .. dtype
+      return nil, "invalid `message.device` type: " .. dtype
     end
   end
 
   if msg.priority and not MESSAGE_PRIORITIES[msg.priority] then
-    return nil, "invalid `priority`: " .. tostring(msg.priority)
+    return nil, "invalid `message.priority`: " .. tostring(msg.priority)
   end
 
   if msg.retry or msg.expire or msg.callback then
@@ -287,13 +314,6 @@ local function errf(msg, err)
   return msg
 end
 
----@param self resty.pushover.client
----@param ep string
----@return string
-local function client_path(self, ep)
-  return self.base_uri .. "/" .. ep:gsub("^/+", "")
-end
-
 ---@param  res                                  resty.http.response
 ---@return resty.pushover.api.message_response? body
 ---@return string?                              error
@@ -310,13 +330,14 @@ local function read_body(res)
     return nil, "empty response body"
   end
 
+  ---@type string
   local ctype = res.headers["content-type"]
   if type(ctype) == "table" then
     ctype = ctype[1]
   end
 
-  if ctype and ctype:lower():find("application/json") then
-    body, err = cjson.decode(body)
+  if ctype and ctype:lower():find("application/json", 1, true) then
+    body, err = decode(body)
     if body == nil then
       return body, errf("failed decoding json response body", err)
     end
@@ -325,12 +346,23 @@ local function read_body(res)
   return body
 end
 
+--- The pushover client object
+---
+---@class resty.pushover.client
+---
+---@field token    string
+---@field user_key string
+---@field base_uri string
+---@field httpc    resty.http.httpc
+local client = {}
+client.__index = client
+
 --- Send a notification.
 ---
 ---@param  message                              resty.pushover.api.message
 ---@return boolean                              ok
----@return string?                              error
 ---@return resty.pushover.api.message_response? response
+---@return string?                              error
 function client:notify(message)
   local msg, err = validate_message(message)
   if not msg then
@@ -340,11 +372,17 @@ function client:notify(message)
   msg.token = self.token
   msg.user = self.user_key
 
+  local req_body
+  req_body, err = encode(msg)
+  if not req_body then
+    return nil, errf("failed encoding request body", err)
+  end
+
   local res
   res, err = self.httpc:request({
     method  = "POST",
-    path    = client_path(self, "messages.json"),
-    body    = cjson.encode(msg),
+    path    = self.base_uri .. "/messages.json",
+    body    = req_body,
     headers = MESSAGE_HEADERS,
   })
 
@@ -364,6 +402,9 @@ function client:notify(message)
     else
       err = errf("invalid API response", body_err)
     end
+
+  elseif type(res.status) ~= "number" then
+    err = "invalid API response"
 
   elseif res.status == 429 then
     err = "rate-limited"
@@ -385,24 +426,32 @@ end
 
 --- Instantiate a new Pushover client
 ---
+---```lua
+---  local po = require "resty.pushover"
+---  local client, err = po.new({
+---    token = "[...]",
+---    user_key = "[...]"
+---  })
+---
+---  if err then
+---    error("failed creating pushover client: " .. err)
+---  end
+---```
+---
 ---@param  opts                   resty.pushover.client.opts
 ---@return resty.pushover.client? client
 ---@return string?                error
 function _M.new(opts)
-  local token = opts.token
-  if type(token) ~= "string" then
-    return nil, "`opts.token` is required and must be a string"
-  end
-
-  local user_key = opts.user_key
-  if type(user_key) ~= "string" then
-    return nil, "`opts.user_key` is required and must be a string"
+  local ok, err = validate_types("opts", client_fields, opts)
+  if not ok then
+    return nil, err
   end
 
   local base_url = opts.base_url or BASE_URL
-  local parsed, err = http:parse_uri(base_url)
+  local parsed
+  parsed, err = http:parse_uri(base_url)
   if not parsed then
-    return nil, "invalid `base_url` " .. (err or "")
+    return nil, "invalid `opts.base_url` " .. (err or "")
   end
 
   local httpc
@@ -411,12 +460,11 @@ function _M.new(opts)
     return nil, err
   end
 
-  local ok
   ok, err = httpc:connect({
-    scheme = parsed[1],
-    host   = parsed[2],
-    port   = parsed[3],
-    ssl_verify = false,
+    scheme          = parsed[1],
+    host            = parsed[2],
+    port            = parsed[3],
+    ssl_server_name = parsed[1] == "https" and parsed[2],
   })
 
   if not ok then
@@ -425,13 +473,42 @@ function _M.new(opts)
 
   return setmetatable(
     {
-      base_uri = parsed[4]:gsub("/+$", ""),
-      token    = token,
-      user_key = user_key,
+      base_uri = parsed[4]:gsub("/+$", ""), -- remove trailing slash
+      token    = opts.token,
+      user_key = opts.user_key,
       httpc    = httpc,
     },
     client
   )
+end
+
+
+---@class pushover.notify_opts : resty.pushover.client.opts, resty.pushover.api.message
+
+--- Single shot convenience method.
+---
+---@param opts pushover.notify_opts
+---@return boolean                              ok
+---@return resty.pushover.api.message_response? response
+---@return string?                              error
+function _M.notify(opts)
+  local po, err = _M.new(opts)
+  if not po then
+    return nil, err
+  end
+
+  return po:notify(opts)
+end
+
+---@diagnostic disable-next-line
+if _G._TEST then -- luacheck: ignore
+  _M._validate_types = validate_types
+  _M._validate_message = validate_message
+  _M._set_resty_http = function(mock)
+    local save = http
+    http = mock
+    return save
+  end
 end
 
 return _M
