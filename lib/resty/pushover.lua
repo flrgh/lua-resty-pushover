@@ -29,7 +29,7 @@ local const_mt = {
   end,
 }
 
----@alias resty.pushover.api.message.sound
+---@alias resty.pushover.sound
 ---| '"pushover"' # default
 ---| '"bike"'
 ---| '"bugle"'
@@ -84,7 +84,7 @@ local MESSAGE_SOUNDS = setmetatable({
 
 _M.sound = MESSAGE_SOUNDS
 
----@alias resty.pushover.api.message.priority
+---@alias resty.pushover.priority
 ---| '-2'|'"lowest"'    # no notification/alert
 ---| '-1'|'"low"'       # send as a quiet notification
 ---| '0' |'"normal"'    # normal priority
@@ -111,25 +111,25 @@ end
 
 _M.priority = setmetatable(MESSAGE_PRIORITIES, const_mt)
 
----@class resty.pushover.api.message
+---@class resty.pushover.message
 ---@field token       string
 ---@field user        string
----@field message     string                              # your message
----@field attachment? any                                 # not yet implemented
----@field device?     string|string[]                     # your user's device name to send the message directly to that device, rather than all of the user's devices
----@field title?      string                              # your message's title, otherwise your app's name is used
----@field url?        string                              # a supplementary URL to show with your message
----@field url_title?  string                              # a title for your supplementary URL, otherwise just the URL is shown
----@field priority?   resty.pushover.api.message.priority # message priority
----@field sound?      string                              # the name of one of the sounds supported by device clients to override the user's default sound choice
----@field timestamp?  number                              # a Unix timestamp of your message's date and time to display to the user, rather than the time your message is received by our API
----@field html        boolean                             # use html for message formatting
----@field monospace   boolean                             # use monospace for message formatting
----@field retry?      number                              # specifies how often (in seconds) the Pushover servers will send the same notification to the user
----@field expire?     number                              # specifies how many seconds your notification will continue to be retried for
----@field callback?   string                              # a publicly-accessible URL that our servers will send a request to when the user has acknowledged your notification.
+---@field message     string                  # your message
+---@field attachment? any                     # not yet implemented
+---@field device?     string|string[]         # your user's device name to send the message directly to that device, rather than all of the user's devices
+---@field title?      string                  # your message's title, otherwise your app's name is used
+---@field url?        string                  # a supplementary URL to show with your message
+---@field url_title?  string                  # a title for your supplementary URL, otherwise just the URL is shown
+---@field priority?   resty.pushover.priority # message priority
+---@field sound?      resty.pushover.sound    # the name of one of the sounds supported by device clients to override the user's default sound choice
+---@field timestamp?  number                  # a Unix timestamp of your message's date and time to display to the user, rather than the time your message is received by our API
+---@field html        boolean                 # use html for message formatting
+---@field monospace   boolean                 # use monospace for message formatting
+---@field retry?      number                  # specifies how often (in seconds) the Pushover servers will send the same notification to the user
+---@field expire?     number                  # specifies how many seconds your notification will continue to be retried for
+---@field callback?   string                  # a publicly-accessible URL that our servers will send a request to when the user has acknowledged your notification.
 
----@class resty.pushover.api.message_response
+---@class resty.pushover.message_response
 ---@field status   number   # 1 => success; anything else is an error
 ---@field request  string   # request id
 ---@field user?    string
@@ -233,8 +233,8 @@ do
 
 end
 
----@param msg string|resty.pushover.api.message
----@return resty.pushover.api.message? message
+---@param msg string|resty.pushover.message
+---@return resty.pushover.message? message
 ---@return string? err
 local function validate_message(msg)
   if not msg then
@@ -315,7 +315,7 @@ local function errf(msg, err)
 end
 
 ---@param  res                                  resty.http.response
----@return resty.pushover.api.message_response? body
+---@return resty.pushover.message_response? body
 ---@return string?                              error
 local function read_body(res)
   if not res.has_body then
@@ -359,9 +359,41 @@ client.__index = client
 
 --- Send a notification.
 ---
----@param  message                              resty.pushover.api.message
+--- See the [API docs](https://pushover.net/api#messages) for more info.
+---
+--- ## Examples
+---
+---```lua
+---  local pushover = require "resty.pushover"
+---  local client, err = pushover.new({
+---    token    = "[...]",
+---    user_key = "[...]",
+---  })
+---
+---  if not client then
+---    error("failed creating client: " .. err)
+---  end
+---
+---  -- these are equivalent
+---  client:notify("my message")
+---  client:notify({ message = "my message" })
+---
+---  -- using more of the message fields
+---  client:notify({
+---    title     = "my message title",
+---    message   = "my message content",
+---    url       = "https://example.com/",
+---    url_title = "an important link",
+---    sound     = pushover.sound.cosmic,
+---    priority  = pushover.priority.high,
+---    monospace = true,
+---    device    = {"my-phone", "my-other-phone"},
+---  })
+---
+---```
+---@param  message                              resty.pushover.message
 ---@return boolean                              ok
----@return resty.pushover.api.message_response? response
+---@return resty.pushover.message_response? response
 ---@return string?                              error
 function client:notify(message)
   local msg, err = validate_message(message)
@@ -483,13 +515,13 @@ function _M.new(opts)
 end
 
 
----@class pushover.notify_opts : resty.pushover.client.opts, resty.pushover.api.message
+---@class pushover.notify_opts : resty.pushover.client.opts, resty.pushover.message
 
 --- Single shot convenience method.
 ---
 ---@param opts pushover.notify_opts
 ---@return boolean                              ok
----@return resty.pushover.api.message_response? response
+---@return resty.pushover.message_response? response
 ---@return string?                              error
 function _M.notify(opts)
   local po, err = _M.new(opts)
