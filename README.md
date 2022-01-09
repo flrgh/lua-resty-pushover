@@ -1,6 +1,6 @@
 # lua-resty-pushover
 
-OpenResty Lua library for pushover.net
+OpenResty Lua library for [Pushover](https://pushover.net/)
 
 
 ## API Reference
