@@ -1,5 +1,5 @@
 package = "lua-resty-pushover"
-version = "0.1.0"
+version = "0.1.0-0"
 source = {
   url = "git://github.com/flrgh/lua-resty-pushover",
   tag = "0.1.0"
@@ -11,7 +11,9 @@ description = {
   maintainer = "Michael Martin <flrgh@protonmail.com>"
 }
 dependencies = {
-  "lua >= 5.1"
+  "lua >= 5.1",
+  "lua-resty-http >= 0.16.1-0",
+  "lua-cjson >= 2.1.0",
 }
 build = {
   type = "builtin",
