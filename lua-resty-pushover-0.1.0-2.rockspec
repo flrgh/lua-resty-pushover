@@ -1,5 +1,5 @@
 package = "lua-resty-pushover"
-version = "0.1.0-0"
+version = "0.1.0-2"
 source = {
   url = "git://github.com/flrgh/lua-resty-pushover",
   tag = "0.1.0"
