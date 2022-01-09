@@ -74,4 +74,8 @@ describe("resty.pushover message input validation", function()
     assert_fail { message = "test", priority = nil,  retry     = 5 }
     assert_fail { message = "test", priority = nil,  expire    = 5 }
   end)
+
+  it("fails when `attachment` is defined", function()
+    assert_fail { message = "test", attachment = "attach" }
+  end)
 end)

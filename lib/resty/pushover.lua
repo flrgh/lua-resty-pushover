@@ -285,6 +285,9 @@ local function validate_message(msg)
     return nil, "invalid `message.sound`: " .. tostring(msg.sound)
   end
 
+  if msg.attachment then
+    return nil, "`message.attachment` is not supported"
+  end
 
   return {
     message   = msg.message,

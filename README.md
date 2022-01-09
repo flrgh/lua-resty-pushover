@@ -99,6 +99,8 @@ The `message` input parameter can be a table with the following fields:
 * `callback` (optional, string)
   A publicly-accessible URL that our servers will send a request to when the user has acknowledged your notification.
 
+**NOTE:** The message `attachment` [field](https://pushover.net/api#attachments) is currently not supported.
+
 The `message` parameter can also be a single string, which is equivalent to passing in `{ message = <message> }`.
 
 See the [Pushover Message API docs](https://pushover.net/api) for more information.
