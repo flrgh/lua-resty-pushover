@@ -2,6 +2,15 @@
 
 OpenResty Lua library for [Pushover](https://pushover.net/)
 
+## Installation
+
+This project is available for install on
+[LuaRocks](https://luarocks.org/modules/flrgh/lua-resty-pushover):
+
+```shell
+$ luarocks install lua-resty-pushover
+```
+
 
 ## API Reference
 
