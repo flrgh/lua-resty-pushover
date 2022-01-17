@@ -2,6 +2,9 @@
 
 OpenResty Lua library for [Pushover](https://pushover.net/)
 
+
+[![Test](https://github.com/flrgh/lua-resty-pushover/actions/workflows/test.yml/badge.svg)](https://github.com/flrgh/lua-resty-pushover/actions)
+
 ## Installation
 
 This project is available for install on
