@@ -22,5 +22,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: leafo/gh-actions-luarocks@v4
+      - name: deps
+        run: |
+          luarocks install lua-resty-http 0.16.1-0
+          luarocks install busted
       - run: ./bin/busted
